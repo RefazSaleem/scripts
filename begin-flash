@@ -1,0 +1,104 @@
+#!/bin/bash
+
+
+##Getting user inputs
+archit=$(zenity --list --column="Select architect" arm64 armeabi x86 x86_64)
+n=$(ls *.zip | wc -l)
+for(( i=1; i<=n; i++));do echo "$(ls *.zip | sed -n "$i"p)" | sed 's/.zip/ /'
+done | zenity --list --title="ROMs available" --column="Select ROM" $( tr -d '\n') --width=300 --height=300>.zip
+dest=$(zenity --entry --text="Enter destination directory" --entry-text=$(echo $HOME) --width=300)
+
+##Creating functions
+permdest=$dest/system/etc/permissions
+appdest=$dest/system/priv-app
+packname () {
+cat AndroidManifest.xml | grep -oP '(?<=package=)[^ ]*' | tr -d '\<">'
+}
+
+lsd () {
+ls --group-directories-first -S | sed -n 1p
+}
+
+libdir () {
+ls | grep "$(echo "$archit")"
+}
+
+libdirx () {
+ls --group-directories-first | grep "$(echo "$archit")" | sed -n 1p
+}
+
+whitelist () {
+ cp $(lsd)/AndroidManifest.xml $(pwd)
+ cat AndroidManifest.xml | grep "<?xml" | awk '{print$1,$2,$3"?>"}'>tmp
+ echo "<permissions>">>tmp
+ echo "  <privapp-permissions package=$(cat AndroidManifest.xml | grep -oP '(?<=package=)[^ ]*' | tr -d '\<>')>">>tmp
+ echo "$(cat AndroidManifest.xml | grep "uses-permission" | sed 's/uses-permission/permission/' | sed 's/permission-sdk-23/permission/' |sed 's/android:name/name/' | sed 's/android:maxSdkVersion="22" name/name/' | sed 's/android:maxSdkVersion="23" name/name/' | sed 's/android:maxSdkVersion="24" name/name/' | sed 's/android:maxSdkVersion="25" name/name/' | sed 's/android:maxSdkVersion="26" name/name/' | sed 's/android:maxSdkVersion="27" name/name/' | sed 's/android:maxSdkVersion="28" name/name/')">>tmp
+ echo "  </privapp-permissions>">>tmp
+ echo "</permissions>">>tmp
+ mv tmp $permdest/privapp-permissions-"$echo"$(packname)"".xml
+}
+
+
+##Checking requirements
+mkdir -p $permdest
+rename 's/ /_/g' *
+rename 's/apkm/sapk/g' *
+rename 's/apks/sapk/g' *
+rename 's/xapk/sapk/g' *
+echo "Installing required packages"
+zenity --password | sudo -S apt install -y apktool adb fastboot git
+
+##for apk
+echo "Preparing apks"
+n=$(ls *.apk | wc -l)
+for (( i=1; i<=n; i++ ));do
+ apktool d $echo "$(ls *.apk | sed -n "$i"p)"
+ whitelist
+ mkdir -p $appdest/"$echo"$(packname)""/lib/"$archit"
+ cp $echo "$(ls *.apk | sed -n "$i"p)" $appdest/"$echo"$(packname)""/"$echo"$(packname)"".apk
+ cp -r $echo "$(lsd)"/lib/$(ls $echo "$(lsd)"/lib/ | grep "$(echo "$archit")")/*.so $appdest/"$echo"$(packname)""/lib/"$archit"
+ rm AndroidManifest.xml
+ rm -R $echo "$(lsd)"
+done
+
+
+##for split apk
+echo "Preparing split apks"
+n=$(ls *.sapk | wc -l)
+for (( i=1; i<=n; i++ ));do
+ unzip $echo "$(ls *.sapk | sed -n "$i"p)" -d sapk
+ cd sapk
+ rm -R $(echo "$(ls -l | grep '^d' | awk '{print$9}')")
+ apktool d $echo "$(ls -S *.apk | sed -n 1p)"
+ whitelist
+ mkdir -p "$(pwd)/lib/"$archit""
+ cp -r $echo "$(lsd)"/lib/$(ls $echo "$(lsd)"/lib/ | grep "$(echo "$archit")")/*.so "$(pwd)/lib/"$archit""
+ rm -R $(lsd)
+ apktool d "$(libdir)"
+ cp "$(libdirx)"/lib/$(echo "$(ls "$(echo "$(libdirx)"/lib/)")")/*.so "$(pwd)/lib/$(echo "$archit")"
+ rm -R $(echo "$(libdirx)")
+ cd ..
+ mv sapk "$echo"$(cat $(echo $(pwd)/sapk/AndroidManifest.xml) | grep -oP '(?<=package=)[^ ]*' | tr -d '\<">')""
+ rm -R $(echo "$(lsd)/AndroidManifest.xml")
+ mv $(lsd) $appdest/
+done
+
+
+##Getting Hosts from github
+wget https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews-gambling-porn/hosts
+mv hosts $dest/system/etc/
+
+##Post Processing
+echo "Cleaning unwanted files from patch"
+find $appdest -type d -empty -delete
+zenity --info --title="Process completed!" --text="Ready to flash" --width=300 --height=140
+
+##Begin Installation
+# unzip $(echo "$(cat .zip).zip") -d oops
+# sudo adb reboot bootloader
+# fastboot flash boot_ab boot_alioth.img
+# fastboot flash vendor_boot_ab vendor_boot_alioth.img
+# fastboot --set-active=a
+# fastboot reboot recovery
+# sudo adb sideload $(echo "$(cat .zip).zip")
+rm .zip
