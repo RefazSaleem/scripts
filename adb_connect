@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# Check dependencies
+check_dependencies() {
+  declare -a commands=("adb" "nc" "nmap")
+  for cmd in "${commands[@]}"; do
+    if ! command -v "$cmd" > /dev/null; then
+      echo "Installing $cmd..."
+      if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        if command -v apt-get > /dev/null; then
+          sudo apt-get install -y "$cmd"
+        elif command -v dnf > /dev/null; then
+          sudo dnf install -y "$cmd"
+        elif command -v pacman > /dev/null; then
+          sudo pacman -S --noconfirm "$cmd"
+        else
+          echo "Could not find package manager to install $cmd"
+          exit 1
+        fi
+      elif [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v brew > /dev/null; then
+          brew install "$cmd"
+        else
+          echo "Homebrew not installed, please install and run again"
+          exit 1
+        fi
+      else
+        echo "Unsupported operating system"
+        exit 1
+      fi
+    fi
+  done
+}
+
+# Check dependencies
+check_dependencies
+
+# Get MAC address
+mac=""
+mac_timeout=10
+while [ -z "$mac" ] && [ "$mac_timeout" -gt 0 ]; do
+  mac=$(osascript -e 'Tell application "System Events" to display dialog "Enter MAC address:" default answer ""' -e 'text returned of result' 2> /dev/null)
+  mac_timeout=$((mac_timeout - 1))
+  sleep 1
+done
+
+# Use default MAC if none entered
+if [ -z "$mac" ]; then
+  mac="8a:84:35:b3:69:6b"
+fi
+
+# Scan network for IP address
+echo "Scanning network for device with MAC address $mac..."
+ip=""
+for i in $(seq 30000 60000); do
+  echo -n "Scanning port $i... "
+  if nc -w 1 -z "$ip" "$i" &> /dev/null; then
+    echo "open"
+  else
+    echo "closed"
+  fi
+done | pv -l -s 30001 > /dev/null &
+nmap -sn 192.168.0.0/24 | grep -i "$mac" | awk '{print $5}' | while read -r ip; do
+  echo "Found device with IP address: $ip"
+  for i in $(seq 30000 60000); do
+    echo "Trying port $i..."
+    if adb connect "$ip:$i" &> /dev/null; then
+      echo "Connected to device with IP address: $ip and port: $i"
+      exit
+    fi
+  done
+done
+
+echo "Could not connect to device"
+exit 1
