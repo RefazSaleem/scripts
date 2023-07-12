@@ -1,0 +1,36 @@
+#!/bin/bash
+
+function decrease_brightness() {
+    if (( $(echo "$(xrandr --verbose | grep "Brightness" | awk '{print $2}') > 0.3" | bc -l) )); then
+        output=$(xrandr | grep " connected" | awk '{print $1}')
+        current_brightness=$(xrandr --verbose | grep "Brightness" | awk '{print $2}')
+        new_brightness=$(echo "$current_brightness - 0.1" | bc)
+        xrandr --output "$output" --brightness "$new_brightness"
+        sed -i '/Brightness/d' ~/.session
+        echo "Brightness=$new_brightness" >> ~/.session
+    fi
+}
+
+function increase_brightness() {
+    if (( $(echo "$(xrandr --verbose | grep "Brightness" | awk '{print $2}') < 1.5" | bc -l) )); then
+        output=$(xrandr | grep " connected" | awk '{print $1}')
+        current_brightness=$(xrandr --verbose | grep "Brightness" | awk '{print $2}')
+        new_brightness=$(echo "$current_brightness + 0.1" | bc)
+        xrandr --output "$output" --brightness "$new_brightness"
+        sed -i '/Brightness/d' ~/.session
+        echo "Brightness=$new_brightness" >> ~/.session
+    fi
+}
+
+# Choose which function to run
+case $1 in
+    "decrease")
+        decrease_brightness
+        ;;
+    "increase")
+        increase_brightness
+        ;;
+    *)
+        echo "Usage: $0 {decrease|increase}"
+        ;;
+esac
