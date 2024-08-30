@@ -1,8 +1,0 @@
-#/bin/bash
-pkg install git golang cmake wget
-git clone --depth 1 https://github.com/jmorganca/ollama
-cd ollama
-go generate ./...
-go build .
-./ollama serve &
-./ollama run orca-mini
