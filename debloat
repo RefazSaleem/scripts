@@ -1,0 +1,24 @@
+#!/bin/bash
+
+USER=0
+
+if [ -z "$1" ]; then
+    echo "Please provide the filename containing package names as an argument."
+    exit 1
+fi
+
+while IFS= read -r package; do
+    echo "Processing package: $package"
+    adb uninstall "$package" >/dev/null 2>&1
+
+    if [ $? -eq 0 ]; then
+        echo "Uninstalled package: $package"
+    else
+        adb shell pm disable-user --user $USER "$package" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Disabled package: $package"
+        else
+            echo "Failed to disable or uninstall package: $package"
+        fi
+    fi
+done < "$1"
