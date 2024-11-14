@@ -1,24 +1,53 @@
 #!/bin/bash
 
-USER=0
+uninstall_apps() {
+    APP_LIST="$1"
+    CRITICAL_LIST="$2"
+    
+    while IFS= read -r package; do
+        if grep -Fxq "$package" "$CRITICAL_LIST"; then
+            continue
+        fi
+        adb uninstall "$package" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Uninstalled app: $package"
+        else
+            echo "Failed to uninstall app: $package"
+        fi
+    done < "$APP_LIST"
+}
 
-if [ -z "$1" ]; then
-    echo "Please provide the filename containing package names as an argument."
+disable_apps() {
+    APP_LIST="$1"
+    CRITICAL_LIST="$2"
+    
+    while IFS= read -r package; do
+        if grep -Fxq "$package" "$CRITICAL_LIST"; then
+            continue
+        fi
+        adb shell pm disable-user --user 0 "$package" >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Disabled app: $package"
+        else
+            echo "Failed to disable app: $package"
+        fi
+    done < "$APP_LIST"
+}
+
+if [ "$1" == "-r" ]; then
+    if [ -z "$2" ]; then
+        echo "Please provide the app list."
+        exit 1
+    fi
+    uninstall_apps "$2" "$3"
+elif [ "$1" == "-rf" ]; then
+    if [ -z "$2" ]; then
+        echo "Please provide the app list."
+        exit 1
+    fi
+    uninstall_apps "$2" "$3"
+    disable_apps "$2" "$3"
+else
+    echo "Invalid option. Use '-r' to uninstall or '-rf' to uninstall and disable apps."
     exit 1
 fi
-
-while IFS= read -r package; do
-    echo "Processing package: $package"
-    adb uninstall "$package" >/dev/null 2>&1
-
-    if [ $? -eq 0 ]; then
-        echo "Uninstalled package: $package"
-    else
-        adb shell pm disable-user --user $USER "$package" >/dev/null 2>&1
-        if [ $? -eq 0 ]; then
-            echo "Disabled package: $package"
-        else
-            echo "Failed to disable or uninstall package: $package"
-        fi
-    fi
-done < "$1"
